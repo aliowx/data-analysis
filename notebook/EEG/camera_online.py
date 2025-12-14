@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import pytesseract
 
 cap = cv2.VideoCapture(0)
 
@@ -13,6 +12,7 @@ while True:
 
     lower_yellow = np.array([20, 100, 100])
     upper_yellow = np.array([35, 255, 255])
+
     mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
     kernel = np.ones((5, 5), np.uint8)
@@ -25,33 +25,22 @@ while True:
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if area > 1000:
+        if area > 500:
             x, y, w, h = cv2.boundingRect(cnt)
-
-            roi = frame[y:y+h, x:x+w]
-            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            _, thresh = cv2.threshold(
-                gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-            )
-
-            config = "--psm 10 -c tessedit_char_whitelist=0123456789"
-            digit = pytesseract.image_to_string(thresh, config=config)
-            digit = digit.strip()
-
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(
                 frame,
-                f"Number: {digit}",
+                "Yellow Object",
                 (x, y - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
+                0.6,
                 (0, 255, 0),
                 2,
             )
 
-    cv2.imshow("Digit Detection", frame)
+    cv2.imshow("Yellow Object Detection", frame)
 
-    if cv2.waitKey(1) & 0xFF == 27:
+    if cv2.waitKey(1) & 0xFF == 27: 
         break
 
 cap.release()
