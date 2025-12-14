@@ -46,6 +46,9 @@ numpy = "1.26.4"
 huggingface-hub = "^0.33.2"
 transformers = "^4.53.1"
 pytesseract = "^0.3.13"
+mediapipe = "^0.10.21"
+serial = "^0.0.97"
+pyserial = "^3.5"
 
 
 [tool.poetry.group.dev.dependencies]
