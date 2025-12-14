@@ -45,6 +45,7 @@ numpy = "^2.2"
 
 huggingface-hub = "^0.33.2"
 transformers = "^4.53.1"
+pytesseract = "^0.3.13"
 
 
 [tool.poetry.group.dev.dependencies]
