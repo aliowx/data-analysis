@@ -21,8 +21,7 @@ def fingers_up(hand_landmarks):
         1 if hand_landmarks.landmark[4].x <
              hand_landmarks.landmark[3].x else 0
     )
-
-
+    
     for i in range(1, 5):
         fingers.append(
             1 if hand_landmarks.landmark[tips_ids[i]].y <
