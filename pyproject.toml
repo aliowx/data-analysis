@@ -49,6 +49,7 @@ pytesseract = "^0.3.13"
 mediapipe = "^0.10.21"
 serial = "^0.0.97"
 pyserial = "^3.5"
+pyttsx3 = "^2.99"
 
 
 [tool.poetry.group.dev.dependencies]
