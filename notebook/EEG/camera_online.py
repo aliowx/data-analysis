@@ -1,45 +1,71 @@
 import cv2
 import mediapipe as mp
-import serial
+import pyttsx3
 import time
-import math
+from collections import deque
 
-arduino = serial.Serial('/dev/ttyACM0', 9600)
-time.sleep(2)
+
+TEXTS = {
+    1: "Hello! This is the first predefined text to be read aloud.",
+    2: "This is the second predefined text for demonstration purposes."
+}
+
+
+engine = pyttsx3.init()
+engine.setProperty("rate", 160)
+
+def speak(text):
+    engine.stop()
+    engine.say(text)
+    engine.runAndWait()
+
 
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1)
+hands = mp_hands.Hands(
+    max_num_hands=1,
+    min_detection_confidence=0.7,
+    min_tracking_confidence=0.7
+)
 mp_draw = mp.solutions.drawing_utils
+
+
+def fingers_up(hand_landmarks, handedness):
+    tips = [4, 8, 12, 16, 20]
+    fingers = []
+
+    # Thumb
+    if handedness == "Right":
+        fingers.append(
+            1 if hand_landmarks.landmark[4].x <
+                 hand_landmarks.landmark[3].x else 0
+        )
+    else:
+        fingers.append(
+            1 if hand_landmarks.landmark[4].x >
+                 hand_landmarks.landmark[3].x else 0
+        )
+
+    # Other fingers
+    for i in range(1, 5):
+        fingers.append(
+            1 if hand_landmarks.landmark[tips[i]].y <
+                 hand_landmarks.landmark[tips[i] - 2].y else 0
+        )
+
+    return fingers
+
+
+gesture_buffer = deque(maxlen=5)
+last_action_time = 0
+ACTION_COOLDOWN = 2.0  # seconds
+
+current_action = "NONE"
+
 
 cap = cv2.VideoCapture(0)
 
-def fingers_up(hand_landmarks):
-    tips_ids = [4, 8, 12, 16, 20]
-    fingers = []
 
-    fingers.append(
-        1 if hand_landmarks.landmark[4].x <
-             hand_landmarks.landmark[3].x else 0
-    )
-    
-    for i in range(1, 5):
-        fingers.append(
-            1 if hand_landmarks.landmark[tips_ids[i]].y <
-                 hand_landmarks.landmark[tips_ids[i]-2].y else 0
-        )
-    return fingers
-
-def finger_distance(lm1, lm2, w, h):
-    x1, y1 = int(lm1.x * w), int(lm1.y * h)
-    x2, y2 = int(lm2.x * w), int(lm2.y * h)
-    return math.hypot(x2 - x1, y2 - y1)
-
-def map_value(x, in_min, in_max, out_min, out_max):
-    x = max(in_min, min(x, in_max))
-    return int((x - in_min) * (out_max - out_min) /
-               (in_max - in_min) + out_min)
-
-while True:
+while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
@@ -47,50 +73,67 @@ while True:
     frame = cv2.flip(frame, 1)
     h, w, _ = frame.shape
 
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands.process(frame_rgb)
+    results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
     if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            mp_draw.draw_landmarks(
-                frame, hand_landmarks, mp_hands.HAND_CONNECTIONS
-            )
+        hand_landmarks = results.multi_hand_landmarks[0]
+        handedness = results.multi_handedness[0].classification[0].label
 
-            fingers = fingers_up(hand_landmarks)
+        mp_draw.draw_landmarks(
+            frame, hand_landmarks, mp_hands.HAND_CONNECTIONS
+        )
+
+        fingers = fingers_up(hand_landmarks, handedness)
+        gesture_buffer.append(fingers)
+
+        # Gesture stabilization
+        if gesture_buffer.count(fingers) >= 4:
+            finger_count = sum(fingers)
+            now = time.time()
+
+            if now - last_action_time > ACTION_COOLDOWN:
+
+                # ✋ Open hand
+                if finger_count == 5:
+                    current_action = "IDLE"
+
+                # ☝️ One finger → Read text 1
+                elif finger_count == 1:
+                    current_action = "READ TEXT 1"
+                    speak(TEXTS[1])
+                    last_action_time = now
+
+                # ✌️ Two fingers → Read text 2
+                elif finger_count == 2:
+                    current_action = "READ TEXT 2"
+                    speak(TEXTS[2])
+                    last_action_time = now
+
+                # 🤟 Three fingers → Custom action
+                elif finger_count == 3:
+                    current_action = "CUSTOM ACTION"
+                    print("Custom action triggered!")
+                    last_action_time = now
+
+                # ✊ Fist → Stop speech
+                elif finger_count == 0:
+                    current_action = "STOP"
+                    engine.stop()
+                    last_action_time = now
 
 
-            if fingers == [1, 1, 0, 0, 0]:
-                thumb_tip = hand_landmarks.landmark[4]
-                index_tip = hand_landmarks.landmark[8]
+    cv2.rectangle(frame, (10, 10), (420, 120), (0, 0, 0), -1)
+    cv2.putText(frame, f"Action: {current_action}", (20, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-                dist = finger_distance(thumb_tip, index_tip, w, h)
+    cv2.putText(frame, "Show fingers to trigger actions",
+                (20, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
 
-                speed = map_value(dist, 20, 200, 0, 255)
-                arduino.write(f"{speed}\n".encode())
+    cv2.imshow("Gesture Controlled Actions", frame)
 
-                cv2.putText(
-                    frame,
-                    f"Speed: {speed}",
-                    (10, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2
-                )
-
-                cv2.line(
-                    frame,
-                    (int(thumb_tip.x * w), int(thumb_tip.y * h)),
-                    (int(index_tip.x * w), int(index_tip.y * h)),
-                    (255, 0, 0),
-                    3
-                )
-
-    cv2.imshow("Gesture Speed Control", frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
-arduino.close()
 cv2.destroyAllWindows()
